@@ -34,7 +34,7 @@ if [ ! -f target/CalculateAverage_thomaswue_image ]; then
     # Uncomment the following line for outputting the compiler graph to the IdealGraphVisualizer
     # NATIVE_IMAGE_OPTS="$NATIVE_IMAGE_OPTS -H:MethodFilter=CalculateAverage_thomaswue.* -H:Dump=:2 -H:PrintGraph=Network"
     
-    for ((i=0;i<=10;i++));
+    for ((i=1;i<=10;i++));
     do
         native-image $NATIVE_IMAGE_OPTS -cp target/average-1.0.0-SNAPSHOT.jar -o target/CalculateAverage_thomaswue_image_v$i dev.morling.onebrc.CalculateAverage_thomaswue_v$i
     done

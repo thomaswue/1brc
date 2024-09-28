@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 
-    for ((i=0;i<=10;i++));
+    for ((i=1;i<=10;i++));
     do
 	cloc ./src/main/java/dev/morling/onebrc/CalculateAverage_thomaswue_v$i.java
     done

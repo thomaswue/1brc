@@ -15,48 +15,40 @@
  */
 package dev.morling.onebrc;
 
-import sun.misc.Unsafe;
-
 import java.io.IOException;
-import java.lang.foreign.Arena;
-import java.lang.reflect.Field;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.stream.IntStream;
 
 public class CalculateAverage_thomaswue_v1 {
     private static final String FILE = "./measurements.txt";
+    private static final int MAX_CITY_NAME_LENGTH = 100;
+
+    // Segment in the file that will be processed in parallel.
+    private record Segment(long start, int size) {
+    };
 
     // Holding the current result for a single city.
     private static class Result {
-        int min;
         int max;
+        int min;
         long sum;
         int count;
-        final long nameAddress;
-        final int nameLength;
-
-        private Result(long nameAddress, int nameLength, int value) {
-            this.nameAddress = nameAddress;
-            this.nameLength = nameLength;
-            this.min = value;
-            this.max = value;
-            this.sum = value;
-            this.count = 1;
-        }
+        byte[] name;
 
         public String toString() {
             return round(((double) min) / 10.0) + "/" + round((((double) sum) / 10.0) / count) + "/" + round(((double) max) / 10.0);
         }
 
-        private static double round(double value) {
+        private double round(double value) {
             return Math.round(value * 10.0) / 10.0;
         }
 
@@ -69,29 +61,35 @@ public class CalculateAverage_thomaswue_v1 {
         }
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         // Calculate input segments.
-        int numberOfChunks = Runtime.getRuntime().availableProcessors();
-        long[] chunks = getSegments(numberOfChunks);
+        List<Segment> segments = getSegments();
 
         // Parallel processing of segments.
-        List<HashMap<String, Result>> allResults = IntStream.range(0, chunks.length - 1).mapToObj(chunkIndex -> {
-            HashMap<String, Result> cities = HashMap.newHashMap(1 << 10);
-            Result[] results = new Result[1 << 14];
-            parseLoop(chunks[chunkIndex], chunks[chunkIndex + 1], results, cities);
+        List<HashMap<String, Result>> allResults = segments.stream().map(s -> {
+            HashMap<String, Result> cities = new HashMap<>();
+            byte[] name = new byte[MAX_CITY_NAME_LENGTH];
+            Result[] results = new Result[1 << 18];
+            try (FileChannel ch = (FileChannel) java.nio.file.Files.newByteChannel(Paths.get(FILE), StandardOpenOption.READ)) {
+                ByteBuffer bf = ch.map(FileChannel.MapMode.READ_ONLY, s.start(), s.size());
+                parseLoop(bf, name, results, cities);
+            }
+            catch (IOException e) {
+                throw new RuntimeException(e);
+            }
             return cities;
         }).parallel().toList();
 
         // Accumulate results sequentially.
         HashMap<String, Result> result = allResults.getFirst();
         for (int i = 1; i < allResults.size(); ++i) {
-            for (Map.Entry<String, Result> entry : allResults.get(i).entrySet()) {
-                Result current = result.get(entry.getKey());
+            for (Map.Entry<String, Result> r : allResults.get(i).entrySet()) {
+                Result current = result.get(r.getKey());
                 if (current != null) {
-                    current.add(entry.getValue());
+                    current.add(r.getValue());
                 }
                 else {
-                    result.put(entry.getKey(), entry.getValue());
+                    result.put(r.getKey(), r.getValue());
                 }
             }
         }
@@ -100,113 +98,91 @@ public class CalculateAverage_thomaswue_v1 {
         System.out.println(new TreeMap<>(result));
     }
 
-    private static final Unsafe UNSAFE = initUnsafe();
-
-    private static Unsafe initUnsafe() {
-        try {
-            Field theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");
-            theUnsafe.setAccessible(true);
-            return (Unsafe) theUnsafe.get(Unsafe.class);
-        }
-        catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    static boolean unsafeEquals(long aStart, long aLength, long bStart, long bLength) {
-        if (aLength != bLength) {
-            return false;
-        }
-        for (int i = 0; i < aLength; ++i) {
-            if (UNSAFE.getByte(aStart + i) != UNSAFE.getByte(bStart + i)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static void parseLoop(long chunkStart, long chunkEnd, Result[] results, HashMap<String, Result> cities) {
-        long scanPtr = chunkStart;
+    private static void parseLoop(ByteBuffer bf, byte[] name, Result[] results, HashMap<String, Result> cities) {
+        int pos = 0;
         byte b;
-        while (scanPtr < chunkEnd) {
-            long nameAddress = scanPtr;
-
-            int hash = UNSAFE.getByte(scanPtr++);
-            while ((b = UNSAFE.getByte(scanPtr++)) != ';') {
+        while (pos < bf.limit()) {
+            int hash = 0;
+            int nameIndex = 0;
+            while ((b = bf.get(pos++)) != ';') {
                 hash += b;
                 hash += hash << 10;
                 hash ^= hash >> 6;
+                name[nameIndex++] = b;
             }
-
-            int nameLength = (int) (scanPtr - 1 - nameAddress);
             hash = hash & (results.length - 1);
 
             int number;
-            byte sign = UNSAFE.getByte(scanPtr++);
+            byte sign = bf.get(pos++);
+            boolean isMinus = false;
             if (sign == '-') {
-                number = UNSAFE.getByte(scanPtr++) - '0';
-                if ((b = UNSAFE.getByte(scanPtr++)) != '.') {
-                    number = number * 10 + (b - '0');
-                    scanPtr++;
-                }
-                number = number * 10 + (UNSAFE.getByte(scanPtr++) - '0');
-                number = -number;
+                isMinus = true;
+                number = bf.get(pos++) - '0';
             }
             else {
                 number = sign - '0';
-                if ((b = UNSAFE.getByte(scanPtr++)) != '.') {
-                    number = number * 10 + (b - '0');
-                    scanPtr++;
-                }
-                number = number * 10 + (UNSAFE.getByte(scanPtr++) - '0');
+            }
+            while ((b = bf.get(pos++)) != '.') {
+                number = number * 10 + b - '0';
+            }
+            number = number * 10 + bf.get(pos++) - '0';
+            if (isMinus) {
+                number = -number;
             }
 
             while (true) {
                 Result existingResult = results[hash];
                 if (existingResult == null) {
-                    Result r = new Result(nameAddress, nameLength, number);
+                    Result r = new Result();
+                    r.name = new byte[nameIndex];
+                    r.max = number;
+                    r.min = number;
+                    r.count = 1;
+                    r.sum = number;
+                    System.arraycopy(name, 0, r.name, 0, nameIndex);
+                    cities.put(new String(r.name), r);
                     results[hash] = r;
-                    byte[] bytes = new byte[nameLength];
-                    UNSAFE.copyMemory(null, nameAddress, bytes, Unsafe.ARRAY_BYTE_BASE_OFFSET, nameLength);
-                    cities.put(new String(bytes, StandardCharsets.UTF_8), r);
-                    break;
-                }
-                else if (unsafeEquals(existingResult.nameAddress, existingResult.nameLength, nameAddress, nameLength)) {
-                    existingResult.min = Math.min(existingResult.min, number);
-                    existingResult.max = Math.max(existingResult.max, number);
-                    existingResult.sum += number;
-                    existingResult.count++;
                     break;
                 }
                 else {
-                    // Collision error, try next.
-                    hash = (hash + 1) & (results.length - 1);
+                    if (Arrays.equals(existingResult.name, 0, nameIndex, name, 0, nameIndex)) {
+                        existingResult.count++;
+                        existingResult.max = Math.max(existingResult.max, number);
+                        existingResult.min = Math.min(existingResult.min, number);
+                        existingResult.sum += number;
+                        break;
+                    }
+                    else {
+                        // Collision error, try next.
+                        hash = (hash + 1) & (results.length - 1);
+                    }
                 }
             }
 
             // Skip new line.
-            scanPtr++;
+            pos++;
         }
     }
 
-    private static long[] getSegments(int numberOfChunks) throws IOException {
-        try (var fileChannel = FileChannel.open(Path.of(FILE), StandardOpenOption.READ)) {
-            long fileSize = fileChannel.size();
-            long segmentSize = (fileSize + numberOfChunks - 1) / numberOfChunks;
-            long[] chunks = new long[numberOfChunks + 1];
-            long mappedAddress = fileChannel.map(MapMode.READ_ONLY, 0, fileSize, Arena.global()).address();
-            chunks[0] = mappedAddress;
-            long endAddress = mappedAddress + fileSize;
-            for (int i = 1; i < numberOfChunks; ++i) {
-                long chunkAddress = mappedAddress + i * segmentSize;
-                // Align to first row start.
-                while (chunkAddress < endAddress && UNSAFE.getByte(chunkAddress++) != '\n') {
-                    // nop
-                }
-                chunks[i] = Math.min(chunkAddress, endAddress);
+    private static List<Segment> getSegments() {
+        try (RandomAccessFile file = new RandomAccessFile(FILE, "r")) {
+            long totalSize = file.length();
+            int cores = Runtime.getRuntime().availableProcessors();
+            int segmentSize = ((int) (totalSize / cores));
+            List<Segment> segments = new ArrayList<>();
+            long filePos = 0;
+            while (filePos < totalSize - segmentSize) {
+                file.seek(filePos + segmentSize);
+                while (file.read() != '\n')
+                    ;
+                segments.add(new Segment(filePos, (int) (file.getFilePointer() - filePos)));
+                filePos = file.getFilePointer();
             }
-            chunks[numberOfChunks] = endAddress;
-            return chunks;
+            segments.add(new Segment(filePos, (int) (totalSize - filePos)));
+            return segments;
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }

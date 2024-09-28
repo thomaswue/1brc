@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 
-    for ((i=0;i<=10;i++));
+    for ((i=1;i<=10;i++));
     do
         perf stat --cpu 0-7 taskset -c 0-7 ./target/CalculateAverage_thomaswue_image_v$i
     done
