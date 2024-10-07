@@ -1,10 +1,10 @@
 # Path to the Fastest #1BRC Solution
 
-This repository contains 10 snapshots of the fastest [One Billion Row Challenge](https://github.com/gunnarmorling/1brc) solution to describe the incremental path to the final version. It describes the different optimization techniques and provides measurements of their impact. For general information on the contest and all submitted solutions, please visit the main [#1brc repository](https://github.com/gunnarmorling/1brc).
+This repository contains 10 snapshots of the fastest [One Billion Row Challenge](https://github.com/gunnarmorling/1brc) solution to describe the incremental path to the final version. It outlines the different optimization techniques and provides measurements of their impact. For general information on the contest and all submitted solutions, please visit the main [#1brc repository](https://github.com/gunnarmorling/1brc).
 
-Also, there is a lot of other great content on the challenge if you are looking for more information, for example a [step by step guide from Marko Topolnik](https://questdb.io/blog/billion-row-challenge-step-by-step/) or a [talk by Roy van Rijn](https://www.youtube.com/watch?v=EFXxXFHpS0M) or a [podcast with Gunnar Morling](https://www.youtube.com/watch?v=RYjB4sGXNZI).
+Also, there is a lot of other great content about the challenge if you are looking for more detailed information, for example a [step by step guide from Marko Topolnik](https://questdb.io/blog/billion-row-challenge-step-by-step/) or a [talk by Roy van Rijn](https://www.youtube.com/watch?v=EFXxXFHpS0M) or a [podcast with Gunnar Morling](https://www.youtube.com/watch?v=RYjB4sGXNZI).
 
-In the chart and table below, the 10 steps of the fastest solution are outlined. Each intermediate step is checked into the repository as a separate file. The summary chart shows how the optimizations applied in the first few versions made the biggest difference compared to the reference implementation. As the solution got more advanced, the incremental progress got smaller over time while the complexity of the solution continued to rise:
+In the chart and table below, the 10 steps of the fastest solution are outlined. Each intermediate step is checked into the repository as a separate file. The summary chart shows how the optimizations applied in the first few versions made the biggest difference compared to the reference implementation. As the solution got more advanced, the incremental progress got smaller over time, while the complexity of the solution continued to rise:
 
 <p align="center">
 <img alt="Step-by-Step Progress of the Winning #1BRC Solution" src="charts/step_by_step_progress.png" width=80%/>

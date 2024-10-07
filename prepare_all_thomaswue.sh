@@ -22,7 +22,7 @@ sdk use java 21.0.2-graal 1>&2
 if [ ! -f target/CalculateAverage_thomaswue_image ]; then
 
     # Performance tuning flags, optimization level 3, maximum inlining exploration, and compile for the architecture where the native image is generated.
-    NATIVE_IMAGE_OPTS="-O3 -H:TuneInlinerExploration=1 -march=native"
+    NATIVE_IMAGE_OPTS="-O3 -H:TuneInlinerExploration=1"
    
     # Need to enable preview for accessing the raw address of the foreign memory access API.
     # Initializing the Scanner to make sure the unsafe access object is known as a non-null compile time constant.
